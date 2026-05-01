@@ -27,10 +27,10 @@
 | Python | 3.12.9 (скомпільовано з джерел) | ✅ | — |
 | venv312 | `~/venv312` | ✅ | — |
 | PyTorch | 2.6.0+cu124 | ✅ | — |
-| vLLM | 0.8.3 | ✅ (не використовується — не підтримує Blackwell) | — |
+| vLLM | 0.8.3 | ⚠️ не використовується (не підтримує Blackwell sm_120) | — |
 | Ollama | 0.22.0 (`~/ollama/bin/ollama`) | ✅ | 11434 |
 | Node.js | v22.22.2 | ✅ | — |
-| Paperclip | 2026.428.0 | ✅ | 3101 |
+| Paperclip | 2026.428.0 | ✅ | 3100 |
 | OpenClaw | 2026.4.29 | ✅ | 18789 (WS) |
 | RAG API | FastAPI (`legal-api.service`) | ✅ | 8080 |
 | Claude Code | v2.1.123 | ✅ | — |
@@ -57,7 +57,7 @@ Telegram
    ↓
 OpenClaw (порт 18789, WebSocket)
    ├── skill: legal-rag  →  RAG API (порт 8080)  →  Qdrant (порт 6333)
-   └── skill: paperclip  →  Paperclip (порт 3101)
+   └── skill: paperclip  →  Paperclip (порт 3100)
                 ↓
         Ollama (порт 11434)
         ├── qwen2.5:32b        ← основна модель
@@ -122,13 +122,19 @@ python3 ~/rag/index_cases.py
 | `legal-rag` | ✅ Ready | Пошук по судових справах, юридичні відповіді |
 | `paperclip` | ✅ Ready | Керування агентами через Paperclip |
 
-### Виправлена проблема (1 травня 2026)
+### Виправлені проблеми
 
-**Причина:** після оновлення OpenClaw 2026.4.29 зник npm-пакет `grammy` (Telegram-бібліотека).  
-**Рішення:**
+**Проблема 1 (30 квітня):** після оновлення OpenClaw зник npm-пакет `grammy`.
 ```bash
 cd ~/.nvm/versions/node/v22.22.2/lib/node_modules/openclaw
 npm install grammy
+openclaw gateway stop && openclaw gateway start
+```
+
+**Проблема 2 (1 травня):** `invalid agent params: unexpected property 'paperclip'` — OpenClaw відхиляв з'єднання від Paperclip через жорстку schema validation.  
+**Рішення:** патч schema + скрипт для повторного застосування після оновлень.
+```bash
+~/fix-openclaw-schema.sh
 openclaw gateway stop && openclaw gateway start
 ```
 
@@ -136,20 +142,24 @@ openclaw gateway stop && openclaw gateway start
 
 ## Paperclip
 
+### Поточний стан: ✅ Працює, агент підключений
+
 | Параметр | Значення |
 |----------|----------|
 | Версія | 2026.428.0 |
-| Порт | 3101 (доступний тільки локально) |
+| Порт | 3100 |
 | Компанія | Юридична практика |
-| Агент | OpenClaw (openclaw_gateway) |
+| Агент OpenClaw | ✅ idle (підключений та працює) |
 
-**SSH тунель з MacBook:**
+### Підключення з MacBook
+
 ```bash
-ssh -L 3101:localhost:3101 leo@192.168.50.105 -N
-# Відкрити у браузері: http://localhost:3101
-```
+# Термінал 1 — SSH тунель (тримати відкритим)
+ssh -L 3100:127.0.0.1:3100 leo@192.168.50.105 -N
 
-**Відома проблема:** OpenClaw Gateway іноді показує `error` в Paperclip через несумісність schema (`unexpected property 'paperclip'`). Telegram-бот при цьому продовжує працювати нормально.
+# Браузер
+http://localhost:3100
+```
 
 ---
 
@@ -161,21 +171,22 @@ ssh -L 3101:localhost:3101 leo@192.168.50.105 -N
 | RAG API | ✅ systemd (`legal-api.service`) | `systemctl --user status legal-api` |
 | OpenClaw | ✅ systemd (`openclaw-gateway.service`) | `openclaw gateway status` |
 | Ollama | ❌ вручну | `curl http://localhost:11434/api/tags` |
-| Paperclip | ❌ вручну | `curl http://localhost:3101/api/health` |
+| Paperclip | ❌ вручну | `curl http://localhost:3100/api/health` |
 
 ### Запуск після перезавантаження
 
 ```bash
-# 1. Ollama (обов'язково, без неї бот не відповідає)
+# 1. Ollama (обов'язково — без неї бот не відповідає)
 OLLAMA_MODELS=~/models/ollama OLLAMA_HOST=0.0.0.0:11434 \
   nohup ~/ollama/bin/ollama serve > ~/ollama.log 2>&1 &
 
 # 2. Paperclip (якщо потрібен UI)
-npx paperclipai onboard --yes
+nohup npx paperclipai onboard --yes > ~/paperclip.log 2>&1 &
 
-# 3. RAG API та OpenClaw стартують автоматично
-systemctl --user status legal-api
-openclaw gateway status
+# 3. RAG API та OpenClaw — стартують автоматично через systemd
+
+# 4. Після оновлення OpenClaw — перевірити патч
+~/fix-openclaw-schema.sh && openclaw gateway stop && openclaw gateway start
 ```
 
 ---
@@ -186,8 +197,8 @@ openclaw gateway status
 # Запуск
 claude
 
-# Статус лайн показує: модель | контекст | git-гілка | проект
-# Налаштований у ~/.claude/settings.json
+# Статус лайн (налаштований у ~/.claude/settings.json):
+# claude-sonnet-4-6  [====        ]  34%  |  45k/200k  |  no-git  |  leo
 ```
 
 ---
@@ -197,7 +208,7 @@ claude
 - [ ] **Завантажити 500 судових справ** з OneDrive → `~/cases/`
   ```bash
   sudo apt install rclone
-  rclone config   # налаштувати OneDrive
+  rclone config        # налаштувати OneDrive
   rclone sync onedrive:Справи ~/cases/
   ```
 - [ ] **Переіндексувати Qdrant** після завантаження справ
@@ -205,22 +216,25 @@ claude
   source ~/venv312/bin/activate && python3 ~/rag/index_cases.py
   ```
 - [ ] **Автозапуск Ollama** при перезавантаженні (systemd service)
+- [ ] **Автозапуск Paperclip** при перезавантаженні (systemd service)
 - [ ] **Tesseract OCR** для сканованих PDF
   ```bash
   sudo apt install tesseract-ocr tesseract-ocr-ukr tesseract-ocr-rus poppler-utils
   ```
-- [ ] **Виправити Paperclip ↔ OpenClaw** (schema несумісність при `paperclipApiUrl`)
 
 ---
 
-## Перевірка всього стеку
+## Швидка перевірка всього стеку
 
 ```bash
-# Один рядок — все одразу
-echo "=Ollama=" && curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; [print(' ✓', m['name']) for m in json.load(sys.stdin)['models']]" && \
-echo "=Qdrant=" && curl -s http://localhost:6333/collections/legal_cases | python3 -c "import sys,json; print(' ✓ vectors:', json.load(sys.stdin)['result']['points_count'])" && \
-echo "=RAG API=" && curl -s http://localhost:8080/health && \
-echo "" && echo "=OpenClaw=" && openclaw gateway status 2>/dev/null | grep "Runtime\|Telegram"
+echo "=Ollama=" && curl -s http://localhost:11434/api/tags | \
+  python3 -c "import sys,json; [print(' ✓', m['name']) for m in json.load(sys.stdin)['models']]"
+echo "=Qdrant=" && curl -s http://localhost:6333/collections/legal_cases | \
+  python3 -c "import sys,json; print(' ✓ vectors:', json.load(sys.stdin)['result']['points_count'])"
+echo "=RAG API=" && curl -s http://localhost:8080/health
+echo ""
+echo "=OpenClaw=" && openclaw gateway status 2>/dev/null | grep "Runtime\|Telegram"
+echo "=Paperclip=" && curl -s http://localhost:3100/api/health
 ```
 
 ---
