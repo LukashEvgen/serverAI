@@ -181,25 +181,24 @@ http://localhost:3100
 
 | Сервіс | Автозапуск | Команда перевірки |
 |--------|-----------|-------------------|
-| Qdrant | ✅ Docker | `curl http://localhost:6333/health` |
+| Qdrant | ✅ Docker (`restart: always`) | `curl http://localhost:6333/health` |
+| Ollama | ✅ systemd (`ollama.service`) | `systemctl --user status ollama` |
 | RAG API | ✅ systemd (`legal-api.service`) | `systemctl --user status legal-api` |
 | OpenClaw | ✅ systemd (`openclaw-gateway.service`) | `openclaw gateway status` |
-| Ollama | ❌ вручну | `curl http://localhost:11434/api/tags` |
-| Paperclip | ❌ вручну | `curl http://localhost:3100/api/health` |
+| Paperclip | ✅ systemd (`paperclip.service`) | `curl http://localhost:3100/api/health` |
 
-### Запуск після перезавантаження
+> Всі сервіси запускаються автоматично після перезавантаження.  
+> Порядок залежностей: Ollama → RAG API + OpenClaw → Paperclip
+
+### Перевірка після перезавантаження
 
 ```bash
-# 1. Ollama (обов'язково — без неї бот не відповідає)
-OLLAMA_MODELS=~/models/ollama OLLAMA_HOST=0.0.0.0:11434 \
-  nohup ~/ollama/bin/ollama serve > ~/ollama.log 2>&1 &
+systemctl --user status ollama paperclip legal-api openclaw-gateway
+```
 
-# 2. Paperclip (якщо потрібен UI)
-nohup npx paperclipai onboard --yes > ~/paperclip.log 2>&1 &
+### Після оновлення OpenClaw — перевірити патч schema
 
-# 3. RAG API та OpenClaw — стартують автоматично через systemd
-
-# 4. Після оновлення OpenClaw — перевірити патч
+```bash
 ~/fix-openclaw-schema.sh && openclaw gateway stop && openclaw gateway start
 ```
 
@@ -229,8 +228,8 @@ claude
   ```bash
   source ~/venv312/bin/activate && python3 ~/rag/index_cases.py
   ```
-- [ ] **Автозапуск Ollama** при перезавантаженні (systemd service)
-- [ ] **Автозапуск Paperclip** при перезавантаженні (systemd service)
+- [x] **Автозапуск Ollama** при перезавантаженні (systemd `ollama.service`)
+- [x] **Автозапуск Paperclip** при перезавантаженні (systemd `paperclip.service`)
 - [ ] **Tesseract OCR** для сканованих PDF
   ```bash
   sudo apt install tesseract-ocr tesseract-ocr-ukr tesseract-ocr-rus poppler-utils
@@ -253,5 +252,5 @@ echo "=Paperclip=" && curl -s http://localhost:3100/api/health
 
 ---
 
-*Оновлено: 1 травня 2026 (вечір)*  
+*Оновлено: 1 травня 2026 (ніч)*  
 *Сервер: `leo@192.168.50.105`*
