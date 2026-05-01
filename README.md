@@ -39,16 +39,16 @@
 
 ## Моделі Ollama
 
-| Модель | Розмір | Призначення | Швидкість |
-|--------|--------|-------------|-----------|
-| `qwen2.5:32b` | 19 GB | Юридичний аналіз, RAG | ~31 tok/sec |
-| `qwen2.5-coder:32b` | 19 GB | Код, скрипти | ~29 tok/sec |
-| `nomic-embed-text` | 274 MB | Ембединги для RAG | — |
-| `qwen2.5-72b` | 47 GB | Резерв | — |
-| `deepseek-v4-pro:cloud` | cloud | Складне юридичне reasoning | — |
-| `qwen3-coder:480b-cloud` | cloud | Складна архітектура/код | — |
-| `deepseek-v3.1:671b-cloud` | cloud | Резерв | — |
-| `gpt-oss:120b-cloud` | cloud | Резерв | — |
+| Модель | Розмір | Призначення |
+|--------|--------|-------------|
+| `qwen2.5:32b` | 19 GB | Юридичний аналіз, RAG (default) |
+| `qwen2.5-coder:32b` | 19 GB | Код, скрипти |
+| `nomic-embed-text` | 274 MB | Ембединги для RAG |
+| `qwen2.5-72b` | 47 GB | Резерв |
+| `deepseek-v4-pro:cloud` | cloud | Складне юридичне reasoning |
+| `qwen3-coder:480b-cloud` | cloud | Складна архітектура/код |
+| `deepseek-v3.1:671b-cloud` | cloud | Резерв |
+| `gpt-oss:120b-cloud` | cloud | Резерв |
 
 > **Чому Ollama замість vLLM:** GPU RTX PRO 4000 Blackwell (sm_120) не підтримується PyTorch 2.6. Ollama підтримує Blackwell нативно.
 
@@ -58,8 +58,8 @@
 
 ```
 Telegram
-   ├── @claude_luk_bot  →  OpenClaw agent: main  →  qwen2.5:32b     (юридичний)
-   └── @Codex_lu_bot    →  OpenClaw agent: coder →  qwen2.5-coder:32b (код)
+   ├── @claude_luk_bot  →  OpenClaw agent: main  →  qwen2.5:32b
+   └── @Codex_lu_bot    →  OpenClaw agent: coder →  qwen2.5-coder:32b
 
 OpenClaw Gateway (порт 18789, WebSocket)
    ├── skill: legal-rag  →  RAG API (порт 8080)  →  Qdrant (порт 6333)
@@ -67,11 +67,11 @@ OpenClaw Gateway (порт 18789, WebSocket)
    └── skill: paperclip  →  Paperclip (порт 3100)
                 ↓
         Ollama (порт 11434)
-        ├── qwen2.5:32b           ← юридична модель (default)
-        ├── qwen2.5-coder:32b     ← модель для коду
-        ├── deepseek-v4-pro:cloud ← складне reasoning (cloud)
-        ├── qwen3-coder:480b-cloud← складна архітектура (cloud)
-        └── nomic-embed-text      ← ембединги для RAG
+        ├── qwen2.5:32b            ← юридична модель (default)
+        ├── qwen2.5-coder:32b      ← модель для коду
+        ├── deepseek-v4-pro:cloud  ← складне reasoning (cloud)
+        ├── qwen3-coder:480b-cloud ← складна архітектура (cloud)
+        └── nomic-embed-text       ← ембединги для RAG
 ```
 
 ---
@@ -86,11 +86,9 @@ OpenClaw Gateway (порт 18789, WebSocket)
 | Код, скрипти, дебаг | coder (@Codex_lu_bot) | `qwen2.5-coder:32b` |
 | Складна архітектура | coder | `qwen3-coder:480b-cloud` (явна вказівка) |
 
-**Веб-пошук:** DuckDuckGo — безкоштовно, без API-ключа. Автоматично запускається через legal-rag skill коли локальна база порожня або питання про актуальне законодавство.
-
 ---
 
-## RAG Pipeline (пошук по судових справах)
+## RAG Pipeline
 
 ### Файли
 
@@ -102,9 +100,7 @@ OpenClaw Gateway (порт 18789, WebSocket)
 
 ### Qdrant колекція
 
-- **Назва:** `legal_cases`
-- **Вектори:** 768 вимірів (nomic-embed-text)
-- **Документи:** `~/cases/`
+- **Назва:** `legal_cases` | **Вектори:** 768 вимірів | **Документи:** `~/cases/`
 
 ### Команди
 
@@ -112,25 +108,18 @@ OpenClaw Gateway (порт 18789, WebSocket)
 # Перевірка стану API
 curl http://localhost:8080/health
 
-# Запитати базу справ
+# Запит до бази
 curl -X POST http://localhost:8080/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "Які шанси виграти справу про стягнення боргу?"}'
 
 # Індексація нових справ
-source ~/venv312/bin/activate
-python3 ~/rag/index_cases.py
+source ~/venv312/bin/activate && python3 ~/rag/index_cases.py
 ```
 
 ---
 
 ## OpenClaw — Telegram-боти
-
-| Параметр | Значення |
-|----------|----------|
-| Версія | 2026.4.29 |
-| Gateway | ws://127.0.0.1:18789 |
-| Telegram admin ID | 447256133 |
 
 ### Агенти
 
@@ -145,25 +134,7 @@ python3 ~/rag/index_cases.py
 | Skill | Статус | Призначення |
 |-------|--------|-------------|
 | `legal-rag` | ✅ | Пошук по справах + fallback до web_search |
-| `paperclip` | ✅ | Керування агентами |
-
-### Виправлені проблеми
-
-**Проблема (30 квітня):** після оновлення OpenClaw зник npm-пакет `grammy`.
-```bash
-cd ~/.nvm/versions/node/v22.22.2/lib/node_modules/openclaw
-npm install grammy
-openclaw gateway stop && openclaw gateway start
-```
-
-**Проблема (1 травня):** `invalid agent params: unexpected property 'paperclip'` — schema validation.
-```bash
-~/fix-openclaw-schema.sh
-openclaw gateway stop && openclaw gateway start
-```
-
-**Проблема (1 травня):** веб-пошук не працював — `provider: "ollama"`.
-**Рішення:** змінено на `provider: "duckduckgo"` в `~/.openclaw/openclaw.json`, увімкнено DuckDuckGo plugin.
+| `paperclip` | ✅ | Керування агентами Paperclip |
 
 ---
 
@@ -173,12 +144,13 @@ openclaw gateway stop && openclaw gateway start
 |----------|----------|
 | Версія | 2026.428.0 |
 | Порт | 3100 |
-| Агент OpenClaw | ✅ підключений |
+| OpenClaw агент | ✅ підключений (idle — чекає задач) |
+| API ключ | `~/.openclaw/workspace/paperclip-claimed-api-key.json` |
 
 ### Підключення з MacBook
 
 ```bash
-# Термінал 1 — SSH тунель (тримати відкритим)
+# SSH тунель (тримати відкритим)
 ssh -L 3100:127.0.0.1:3100 leo@192.168.50.105 -N
 
 # Браузер
@@ -197,26 +169,52 @@ http://localhost:3100
 | OpenClaw | `openclaw-gateway.service` (user) | `openclaw gateway status` |
 | Paperclip | `paperclip.service` (user) | `curl http://localhost:3100/api/health` |
 
-> Порядок залежностей: Qdrant → Ollama → RAG API + OpenClaw → Paperclip
-
 ```bash
 # Перевірка всіх після перезавантаження
 systemctl --user status ollama paperclip legal-api openclaw-gateway
 ```
 
-### Після оновлення OpenClaw
-
-```bash
-~/fix-openclaw-schema.sh && openclaw gateway stop && openclaw gateway start
-```
-
 ---
 
-## Claude Code на сервері
+## Відомі проблеми та виправлення
+
+### 1. Після оновлення OpenClaw зникає пакет `grammy`
 
 ```bash
-# Запуск
-claude
+cd ~/.nvm/versions/node/v22.22.2/lib/node_modules/openclaw
+npm install grammy
+openclaw gateway stop && openclaw gateway start
+```
+
+### 2. Paperclip не підключається — `unexpected property 'paperclip'`
+
+OpenClaw відхиляє з'єднання від Paperclip через жорстку schema validation у `AgentParamsSchema`.
+
+**Виправлення:**
+
+```bash
+~/fix-openclaw-schema.sh
+openclaw gateway stop && openclaw gateway start
+```
+
+Скрипт автоматично знаходить `protocol-*.js` і додає поле:
+```js
+paperclip: Type.Optional(Type.Unknown())
+```
+
+> ⚠️ Патч потрібно повторювати після кожного оновлення OpenClaw.
+
+### 3. Веб-пошук не працював — `provider: "ollama"`
+
+Виправлено в `~/.openclaw/openclaw.json`:
+
+```json
+"web": {
+  "search": {
+    "provider": "duckduckgo",
+    "enabled": true
+  }
+}
 ```
 
 ---
@@ -229,9 +227,9 @@ echo "=Ollama=" && curl -s http://localhost:11434/api/tags | \
 echo "=Qdrant=" && curl -s http://localhost:6333/collections/legal_cases | \
   python3 -c "import sys,json; print(' ✓ vectors:', json.load(sys.stdin)['result']['points_count'])"
 echo "=RAG API=" && curl -s http://localhost:8080/health
-echo "=Web search=" && openclaw capability web providers 2>/dev/null | grep '"selected": true' | head -1
-echo "=OpenClaw=" && openclaw gateway status 2>/dev/null | grep "Runtime\|Telegram"
 echo "=Paperclip=" && curl -s http://localhost:3100/api/health
+echo "=Web search=" && openclaw capability web providers 2>/dev/null | grep '"selected": true' | head -1
+echo "=OpenClaw=" && openclaw gateway status 2>/dev/null | grep "Runtime\|Connectivity"
 ```
 
 ---
@@ -241,7 +239,7 @@ echo "=Paperclip=" && curl -s http://localhost:3100/api/health
 - [ ] **Завантажити 500 судових справ** з OneDrive → `~/cases/`
   ```bash
   sudo apt install rclone
-  rclone config   # налаштувати OneDrive
+  rclone config        # налаштувати OneDrive
   rclone sync onedrive:Справи ~/cases/
   ```
 - [ ] **Переіндексувати Qdrant** після завантаження справ
@@ -255,5 +253,5 @@ echo "=Paperclip=" && curl -s http://localhost:3100/api/health
 
 ---
 
-*Оновлено: 1 травня 2026*
+*Оновлено: 1 травня 2026*  
 *Сервер: `leo@192.168.50.105`*
