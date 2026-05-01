@@ -11,7 +11,7 @@
 | IP | 192.168.50.105 |
 | ОС | Ubuntu 25.04 (plucky) |
 
-> Ubuntu 25.04 обрано через несумісність 24.04 з Realtek 8126 ethernet.
+> Ubuntu 25.04 обрано через несумісність 24.04 з мережевою картою Realtek 8126.
 
 ---
 
@@ -27,25 +27,26 @@
 | Python | 3.12.9 (скомпільовано з джерел) | ✅ | — |
 | venv312 | `~/venv312` | ✅ | — |
 | PyTorch | 2.6.0+cu124 | ✅ | — |
-| vLLM | 0.8.3 | ✅ | — |
+| vLLM | 0.8.3 | ✅ (не використовується — не підтримує Blackwell) | — |
 | Ollama | 0.22.0 (`~/ollama/bin/ollama`) | ✅ | 11434 |
 | Node.js | v22.22.2 | ✅ | — |
 | Paperclip | 2026.428.0 | ✅ | 3101 |
 | OpenClaw | 2026.4.29 | ✅ | 18789 (WS) |
-| RAG API | FastAPI (legal-api.service) | ✅ | 8080 |
+| RAG API | FastAPI (`legal-api.service`) | ✅ | 8080 |
+| Claude Code | v2.1.123 | ✅ | — |
 
 ---
 
-## Моделі (Ollama)
+## Моделі Ollama
 
 | Модель | Розмір | Призначення | Швидкість |
 |--------|--------|-------------|-----------|
-| `qwen2.5:32b` | 19.9 GB | Юридичний аналіз, RAG | ~31 tok/sec |
+| `qwen2.5:32b` | 19.9 GB | Юридичний аналіз, RAG, Telegram-бот | ~31 tok/sec |
 | `qwen2.5-coder:32b` | 19.9 GB | Код, скрипти | ~29 tok/sec |
 | `nomic-embed-text` | 274 MB | Ембединги для векторного пошуку | — |
-| `qwen2.5-72b` | 47.4 GB | Резерв (не поміщається в VRAM повністю) | — |
+| `qwen2.5-72b` | 47.4 GB | Резерв (не поміщається повністю в 48 GB VRAM) | — |
 
-> GPU: 2x RTX PRO 4000 (sm_120, Blackwell). PyTorch 2.6 не підтримує sm_120 нативно — тому використовується Ollama (підтримує Blackwell нативно), а не vLLM.
+> **Чому Ollama замість vLLM:** GPU RTX PRO 4000 Blackwell (sm_120) не підтримується PyTorch 2.6. Ollama підтримує Blackwell нативно.
 
 ---
 
@@ -54,42 +55,40 @@
 ```
 Telegram
    ↓
-OpenClaw (порт 18789, WS)
+OpenClaw (порт 18789, WebSocket)
    ├── skill: legal-rag  →  RAG API (порт 8080)  →  Qdrant (порт 6333)
-   └── skill: paperclip  →  Paperclip UI (порт 3101)
-                                    ↓
-                          Ollama (порт 11434)
-                          ├── qwen2.5:32b
-                          ├── qwen2.5-coder:32b
-                          └── nomic-embed-text
+   └── skill: paperclip  →  Paperclip (порт 3101)
+                ↓
+        Ollama (порт 11434)
+        ├── qwen2.5:32b        ← основна модель
+        ├── qwen2.5-coder:32b
+        └── nomic-embed-text   ← ембединги
 ```
 
 ---
 
-## RAG Pipeline
+## RAG Pipeline (пошук по судових справах)
 
 ### Файли
 
 | Файл | Призначення |
 |------|-------------|
 | `~/rag/index_cases.py` | Індексація документів (PDF/DOCX/TXT) → Qdrant |
-| `~/rag/ask.py` | Прямий CLI-запит до бази справ |
-| `~/rag/api.py` | FastAPI HTTP сервер на порту 8080 |
+| `~/rag/ask.py` | CLI-запит до бази справ |
+| `~/rag/api.py` | FastAPI HTTP сервер (порт 8080) |
 | `~/rag/start_api.sh` | Скрипт запуску API |
 
 ### Qdrant колекція
 
 - **Назва:** `legal_cases`
 - **Вектори:** 768 вимірів (nomic-embed-text)
-- **Зараз:** 1 тестовий документ (500 реальних справ ще не завантажено)
+- **Поточний стан:** 1 тестовий документ (500 реальних справ ще не завантажено)
+- **Документи:** `~/cases/`
 
 ### Команди
 
 ```bash
-# Запуск Ollama
-OLLAMA_MODELS=~/models/ollama OLLAMA_HOST=0.0.0.0:11434 ~/ollama/bin/ollama serve
-
-# Перевірка API
+# Перевірка стану API
 curl http://localhost:8080/health
 
 # Запитати базу справ
@@ -97,7 +96,7 @@ curl -X POST http://localhost:8080/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "Які шанси виграти справу про стягнення боргу?"}'
 
-# Індексація нових справ (покласти файли в ~/cases/)
+# Індексація нових справ (покласти файли в ~/cases/ і запустити)
 source ~/venv312/bin/activate
 python3 ~/rag/index_cases.py
 ```
@@ -106,11 +105,15 @@ python3 ~/rag/index_cases.py
 
 ## OpenClaw — Telegram-бот
 
-### Налаштування
+### Поточний стан: ✅ Працює
 
-- **Telegram user ID адміністратора:** 447256133
-- **OpenClaw Gateway URL:** `ws://127.0.0.1:18789/`
-- **LLM:** `qwen2.5:32b` через Ollama (OpenAI-сумісний API на порту 11434)
+| Параметр | Значення |
+|----------|----------|
+| Версія | 2026.4.29 |
+| Telegram | ON / OK |
+| Модель | qwen2.5:32b (33k context) |
+| Gateway | ws://127.0.0.1:18789 |
+| Telegram admin ID | 447256133 |
 
 ### Skills
 
@@ -119,105 +122,108 @@ python3 ~/rag/index_cases.py
 | `legal-rag` | ✅ Ready | Пошук по судових справах, юридичні відповіді |
 | `paperclip` | ✅ Ready | Керування агентами через Paperclip |
 
-### Конфігурація файлів
+### Виправлена проблема (1 травня 2026)
 
-- `~/.openclaw/workspace/TOOLS.md` — інструкції для агента (RAG API, Ollama)
-- `~/.openclaw/workspace/skills/legal-rag/SKILL.md` — юридичний skill
+**Причина:** після оновлення OpenClaw 2026.4.29 зник npm-пакет `grammy` (Telegram-бібліотека).  
+**Рішення:**
+```bash
+cd ~/.nvm/versions/node/v22.22.2/lib/node_modules/openclaw
+npm install grammy
+openclaw gateway stop && openclaw gateway start
+```
 
 ---
 
 ## Paperclip
 
-- **URL (локально через SSH тунель):** `http://localhost:3101`
-- **SSH тунель з MacBook:** `ssh -L 3101:localhost:3101 leo@192.168.50.105 -N`
-- **Компанія:** Юридична практика
-- **Агент OpenClaw:** підключено через `openclaw_gateway`
-- **API ключ:** збережено в `~/.openclaw/workspace/paperclip-claimed-api-key.json`
+| Параметр | Значення |
+|----------|----------|
+| Версія | 2026.428.0 |
+| Порт | 3101 (доступний тільки локально) |
+| Компанія | Юридична практика |
+| Агент | OpenClaw (openclaw_gateway) |
 
-### Відома проблема
+**SSH тунель з MacBook:**
+```bash
+ssh -L 3101:localhost:3101 leo@192.168.50.105 -N
+# Відкрити у браузері: http://localhost:3101
+```
 
-OpenClaw Gateway показує статус `error` з Paperclip через несумісність:
-```
-INVALID_REQUEST: invalid agent params: at root: unexpected property 'paperclip'
-```
-Paperclip 2026.428.0 надсилає поле `paperclipApiUrl` у WebSocket-запиті, яке OpenClaw 2026.4.29 відхиляє через жорстку schema validation. Потребує оновлення одного з компонентів або патча schema.
+**Відома проблема:** OpenClaw Gateway іноді показує `error` в Paperclip через несумісність schema (`unexpected property 'paperclip'`). Telegram-бот при цьому продовжує працювати нормально.
 
 ---
 
 ## Автозапуск сервісів
 
-### legal-api (systemd user service)
+| Сервіс | Автозапуск | Команда перевірки |
+|--------|-----------|-------------------|
+| Qdrant | ✅ Docker | `curl http://localhost:6333/health` |
+| RAG API | ✅ systemd (`legal-api.service`) | `systemctl --user status legal-api` |
+| OpenClaw | ✅ systemd (`openclaw-gateway.service`) | `openclaw gateway status` |
+| Ollama | ❌ вручну | `curl http://localhost:11434/api/tags` |
+| Paperclip | ❌ вручну | `curl http://localhost:3101/api/health` |
+
+### Запуск після перезавантаження
 
 ```bash
-# Статус
-systemctl --user status legal-api
-
-# Перезапуск
-systemctl --user restart legal-api
-
-# Логи
-journalctl --user -u legal-api -f
-```
-
-### Ollama (запускається вручну або потрібен systemd)
-
-```bash
+# 1. Ollama (обов'язково, без неї бот не відповідає)
 OLLAMA_MODELS=~/models/ollama OLLAMA_HOST=0.0.0.0:11434 \
   nohup ~/ollama/bin/ollama serve > ~/ollama.log 2>&1 &
+
+# 2. Paperclip (якщо потрібен UI)
+npx paperclipai onboard --yes
+
+# 3. RAG API та OpenClaw стартують автоматично
+systemctl --user status legal-api
+openclaw gateway status
 ```
 
-### Перевірка всіх сервісів
+---
+
+## Claude Code на сервері
 
 ```bash
-# Ollama
-curl -s http://localhost:11434/api/tags
+# Запуск
+claude
 
-# RAG API
-curl -s http://localhost:8080/health
-
-# Qdrant
-curl -s http://localhost:6333/health
-
-# Paperclip
-curl -s http://localhost:3101/api/health
-
-# OpenClaw
-openclaw gateway status
+# Статус лайн показує: модель | контекст | git-гілка | проект
+# Налаштований у ~/.claude/settings.json
 ```
 
 ---
 
 ## Що залишилось зробити
 
-- [ ] **Завантажити 500 судових справ** з OneDrive на сервер (`~/cases/`)
-  - Встановити `rclone`: `sudo apt install rclone`
-  - Налаштувати OneDrive: `rclone config`
-  - Синхронізувати: `rclone sync onedrive:Справи ~/cases/`
-- [ ] **Переіндексувати базу** після завантаження справ: `python3 ~/rag/index_cases.py`
-- [ ] **Виправити OpenClaw ↔ Paperclip** (несумісність schema)
+- [ ] **Завантажити 500 судових справ** з OneDrive → `~/cases/`
+  ```bash
+  sudo apt install rclone
+  rclone config   # налаштувати OneDrive
+  rclone sync onedrive:Справи ~/cases/
+  ```
+- [ ] **Переіндексувати Qdrant** після завантаження справ
+  ```bash
+  source ~/venv312/bin/activate && python3 ~/rag/index_cases.py
+  ```
 - [ ] **Автозапуск Ollama** при перезавантаженні (systemd service)
-- [ ] **Встановити Tesseract** для OCR сканованих PDF: `sudo apt install tesseract-ocr tesseract-ocr-ukr`
+- [ ] **Tesseract OCR** для сканованих PDF
+  ```bash
+  sudo apt install tesseract-ocr tesseract-ocr-ukr tesseract-ocr-rus poppler-utils
+  ```
+- [ ] **Виправити Paperclip ↔ OpenClaw** (schema несумісність при `paperclipApiUrl`)
 
 ---
 
-## Команди для швидкого старту після перезавантаження
+## Перевірка всього стеку
 
 ```bash
-# 1. Запустити Ollama
-OLLAMA_MODELS=~/models/ollama OLLAMA_HOST=0.0.0.0:11434 \
-  nohup ~/ollama/bin/ollama serve > ~/ollama.log 2>&1 &
-
-# 2. RAG API запускається автоматично (systemd)
-systemctl --user status legal-api
-
-# 3. Запустити Paperclip (якщо не запущений)
-npx paperclipai onboard --yes
-
-# 4. OpenClaw Gateway запускається автоматично (systemd)
-openclaw gateway status
+# Один рядок — все одразу
+echo "=Ollama=" && curl -s http://localhost:11434/api/tags | python3 -c "import sys,json; [print(' ✓', m['name']) for m in json.load(sys.stdin)['models']]" && \
+echo "=Qdrant=" && curl -s http://localhost:6333/collections/legal_cases | python3 -c "import sys,json; print(' ✓ vectors:', json.load(sys.stdin)['result']['points_count'])" && \
+echo "=RAG API=" && curl -s http://localhost:8080/health && \
+echo "" && echo "=OpenClaw=" && openclaw gateway status 2>/dev/null | grep "Runtime\|Telegram"
 ```
 
 ---
 
-*Дата: 30 квітня — 1 травня 2026*  
-*Сервер: leo@192.168.50.105*
+*Оновлено: 1 травня 2026*  
+*Сервер: `leo@192.168.50.105`*
