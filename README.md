@@ -54,15 +54,17 @@
 
 ```
 Telegram
-   ↓
-OpenClaw (порт 18789, WebSocket)
+   ├── @claude_luk_bot  →  OpenClaw agent: main  →  qwen2.5:32b     (юридичний аналіз)
+   └── @Codex_lu_bot    →  OpenClaw agent: coder →  qwen2.5-coder:32b (код і скрипти)
+
+OpenClaw Gateway (порт 18789, WebSocket)
    ├── skill: legal-rag  →  RAG API (порт 8080)  →  Qdrant (порт 6333)
    └── skill: paperclip  →  Paperclip (порт 3100)
                 ↓
         Ollama (порт 11434)
-        ├── qwen2.5:32b        ← основна модель
-        ├── qwen2.5-coder:32b
-        └── nomic-embed-text   ← ембединги
+        ├── qwen2.5:32b        ← юридична модель
+        ├── qwen2.5-coder:32b  ← модель для коду
+        └── nomic-embed-text   ← ембединги для RAG
 ```
 
 ---
@@ -103,24 +105,36 @@ python3 ~/rag/index_cases.py
 
 ---
 
-## OpenClaw — Telegram-бот
+## OpenClaw — Telegram-боти
 
-### Поточний стан: ✅ Працює
+### Поточний стан: ✅ Два боти активні
 
 | Параметр | Значення |
 |----------|----------|
 | Версія | 2026.4.29 |
-| Telegram | ON / OK |
-| Модель | qwen2.5:32b (33k context) |
 | Gateway | ws://127.0.0.1:18789 |
 | Telegram admin ID | 447256133 |
 
-### Skills
+### Агенти
+
+| Агент | Telegram-бот | Модель | Призначення |
+|-------|-------------|--------|-------------|
+| `main` (default) | `@claude_luk_bot` | `qwen2.5:32b` | Юридичний аналіз, RAG, загальні питання |
+| `coder` | `@Codex_lu_bot` | `qwen2.5-coder:32b` | Код, скрипти, автоматизація |
+
+### Skills (агент main)
 
 | Skill | Статус | Призначення |
 |-------|--------|-------------|
 | `legal-rag` | ✅ Ready | Пошук по судових справах, юридичні відповіді |
 | `paperclip` | ✅ Ready | Керування агентами через Paperclip |
+
+### Workspaces
+
+| Агент | Workspace |
+|-------|-----------|
+| main | `~/.openclaw/workspace/` |
+| coder | `~/.openclaw/workspace-coder/` |
 
 ### Виправлені проблеми
 
@@ -239,5 +253,5 @@ echo "=Paperclip=" && curl -s http://localhost:3100/api/health
 
 ---
 
-*Оновлено: 1 травня 2026*  
+*Оновлено: 1 травня 2026 (вечір)*  
 *Сервер: `leo@192.168.50.105`*
